@@ -2,7 +2,7 @@
 #
 # Author: Evan Juras
 # Date: 4/15/18
-# Description: 
+# Description:
 # This program uses a TensorFlow classifier to perform object detection.
 # It loads the classifier uses it to perform object detection on a Picamera feed.
 # It draws boxes and scores around the objects of interest in each frame from
@@ -31,8 +31,8 @@ import sys
 # Set up camera constants
 IM_WIDTH = 1280
 IM_HEIGHT = 720
-#IM_WIDTH = 640    Use smaller resolution for
-#IM_HEIGHT = 480   slightly faster framerate
+# IM_WIDTH = 640    Use smaller resolution for
+# IM_HEIGHT = 480   slightly faster framerate
 
 # Select camera type (if user enters --usbcam when calling this script,
 # a USB webcam will be used)
@@ -59,10 +59,10 @@ CWD_PATH = os.getcwd()
 
 # Path to frozen detection graph .pb file, which contains the model that is used
 # for object detection.
-PATH_TO_CKPT = os.path.join(CWD_PATH,MODEL_NAME,'frozen_inference_graph.pb')
+PATH_TO_CKPT = os.path.join(CWD_PATH, MODEL_NAME, 'frozen_inference_graph.pb')
 
 # Path to label map file
-PATH_TO_LABELS = os.path.join(CWD_PATH,'data','mscoco_label_map.pbtxt')
+PATH_TO_LABELS = os.path.join(CWD_PATH, 'data', 'mscoco_label_map.pbtxt')
 
 # Number of classes the object detector can identify
 NUM_CLASSES = 90
@@ -73,7 +73,8 @@ NUM_CLASSES = 90
 # Here we use internal utility functions, but anything that returns a
 # dictionary mapping integers to appropriate string labels would be fine
 label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
-categories = label_map_util.convert_label_map_to_categories(label_map, max_num_classes=NUM_CLASSES, use_display_name=True)
+categories = label_map_util.convert_label_map_to_categories(label_map, max_num_classes=NUM_CLASSES,
+                                                            use_display_name=True)
 category_index = label_map_util.create_category_index(categories)
 
 # Load the Tensorflow model into memory.
@@ -86,7 +87,6 @@ with detection_graph.as_default():
         tf.import_graph_def(od_graph_def, name='')
 
     sess = tf.compat.v1.Session(graph=detection_graph)
-
 
 # Define input and output tensors (i.e. data) for the object detection classifier
 
@@ -122,15 +122,17 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 if camera_type == 'picamera':
     # Initialize Picamera and grab reference to the raw capture
     camera = PiCamera()
-    camera.resolution = (IM_WIDTH,IM_HEIGHT)
+    camera.resolution = (IM_WIDTH, IM_HEIGHT)
     camera.framerate = 10
-    rawCapture = PiRGBArray(camera, size=(IM_WIDTH,IM_HEIGHT))
+    rawCapture = PiRGBArray(camera, size=(IM_WIDTH, IM_HEIGHT))
     rawCapture.truncate(0)
-
-    for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
+    #-------------------------------------------------------------------------------------
+    spin = 0
+    # -------------------------------------------------------------------------------------
+    for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
 
         t1 = cv2.getTickCount()
-        
+
         # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
         # i.e. a single-column array, where each item in the column has the pixel RGB value
         frame = np.copy(frame1.array)
@@ -154,15 +156,33 @@ if camera_type == 'picamera':
             line_thickness=8,
             min_score_thresh=0.40)
 
-        cv2.putText(frame,"FPS: {0:.2f}".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-
+        if (int(classes[0][0]) == 1):
+            xcenter = int(((boxes[0][0][1] + boxes[0][0][3]) / 2) * IM_WIDTH)
+            ycenter = int(((boxes[0][0][0] + boxes[0][0][2]) / 2) * IM_HEIGHT)
+        else:
+            xcenter = 0
+            ycenter = 0
         # All the results have been drawn on the frame, so it's time to display it.
-        cv2.imshow('Object detector', frame)
+        #cv2.imshow('Object detector', frame)
 
         t2 = cv2.getTickCount()
-        time1 = (t2-t1)/freq
-        frame_rate_calc = 1/time1
+        time1 = (t2 - t1) / freq
+        frame_rate_calc = 1 / time1
+        
+        ## Action:
+        
+        if xcenter == 0 and ycenter == 0 and spin == 0:
+            print("Spin")
+            spin = 1
+        elif xcenter != 0 and ycenter != 0 and spin == 1:
+            print("Stop motor and continue")
+            spin = 0
+        if xcenter < IM_WIDTH / 2 - IM_WIDTH / 8 and spin == 0:
+            print("gira a destra")
 
+        elif xcenter > IM_WIDTH / 2 + IM_WIDTH / 8 and spin == 0:
+            print("gira a sinistra")
+            
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
             break
@@ -175,10 +195,10 @@ if camera_type == 'picamera':
 elif camera_type == 'usb':
     # Initialize USB webcam feed
     camera = cv2.VideoCapture(0)
-    ret = camera.set(3,IM_WIDTH)
-    ret = camera.set(4,IM_HEIGHT)
+    ret = camera.set(3, IM_WIDTH)
+    ret = camera.set(4, IM_HEIGHT)
 
-    while(True):
+    while (True):
 
         t1 = cv2.getTickCount()
 
@@ -204,8 +224,8 @@ elif camera_type == 'usb':
             line_thickness=8,
             min_score_thresh=0.85)
 
-        cv2.putText(frame,"FPS: {0:.2f}".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        
+        cv2.putText(frame, "FPS: {0:.2f}".format(frame_rate_calc), (30, 50), font, 1, (255, 255, 0), 2, cv2.LINE_AA)
+
         # All the results have been drawn on the frame, so it's time to display it.
 
         # Press 'q' to quit
@@ -215,4 +235,3 @@ elif camera_type == 'usb':
     camera.release()
 
 cv2.destroyAllWindows()
-
