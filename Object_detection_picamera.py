@@ -1,23 +1,3 @@
-######## Picamera Object Detection Using Tensorflow Classifier #########
-#
-# Author: Evan Juras
-# Date: 4/15/18
-# Description:
-# This program uses a TensorFlow classifier to perform object detection.
-# It loads the classifier uses it to perform object detection on a Picamera feed.
-# It draws boxes and scores around the objects of interest in each frame from
-# the Picamera. It also can be used with a webcam by adding "--usbcam"
-# when executing this script from the terminal.
-
-## Some of the code is copied from Google's example at
-## https://github.com/tensorflow/models/blob/master/research/object_detection/object_detection_tutorial.ipynb
-
-## and some is copied from Dat Tran's example at
-## https://github.com/datitran/object_detector_app/blob/master/object_detection_app.py
-
-## but I changed it to make it more understandable to me.
-
-
 # Import packages
 import os
 import cv2
@@ -27,6 +7,11 @@ from picamera import PiCamera
 import tensorflow as tf
 import argparse
 import sys
+import time
+import RPi.GPIO as GP
+
+GP.setmode(GP.BOARD)
+GP.setwarnings(False)
 
 # Set up camera constants
 IM_WIDTH = 1280
@@ -119,119 +104,104 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 # for USB.
 
 ### Picamera ###
-if camera_type == 'picamera':
-    # Initialize Picamera and grab reference to the raw capture
-    camera = PiCamera()
-    camera.resolution = (IM_WIDTH, IM_HEIGHT)
-    camera.framerate = 10
-    rawCapture = PiRGBArray(camera, size=(IM_WIDTH, IM_HEIGHT))
-    rawCapture.truncate(0)
-    #-------------------------------------------------------------------------------------
-    spin = 0
-    # -------------------------------------------------------------------------------------
-    for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+# Initialize Picamera and grab reference to the raw capture
+camera = PiCamera()
+camera.resolution = (IM_WIDTH, IM_HEIGHT)
+camera.framerate = 10
+rawCapture = PiRGBArray(camera, size=(IM_WIDTH, IM_HEIGHT))
+rawCapture.truncate(0)
+#-------------------------------------------------------------------------------------
+#RPGIO:
+LEDG = 16
+BUTTON_STOP = 18
 
-        t1 = cv2.getTickCount()
+GP.setup(LEDG, GP.OUT)
+GP.setup(BUTTON_STOP, GP.IN, pull_up_down=GP.PUD_UP)  # Se Button = 0, bottone pigiato.
 
-        # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
-        # i.e. a single-column array, where each item in the column has the pixel RGB value
-        frame = np.copy(frame1.array)
-        frame.setflags(write=1)
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_expanded = np.expand_dims(frame_rgb, axis=0)
+spin = 0
+stop = True
+fail = 0
+# -------------------------------------------------------------------------------------
+for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
 
-        # Perform the actual detection by running the model with the image as input
-        (boxes, scores, classes, num) = sess.run(
-            [detection_boxes, detection_scores, detection_classes, num_detections],
-            feed_dict={image_tensor: frame_expanded})
+    t1 = cv2.getTickCount()
 
-        # Draw the results of the detection (aka 'visulaize the results')
-        vis_util.visualize_boxes_and_labels_on_image_array(
-            frame,
-            np.squeeze(boxes),
-            np.squeeze(classes).astype(np.int32),
-            np.squeeze(scores),
-            category_index,
-            use_normalized_coordinates=True,
-            line_thickness=8,
-            min_score_thresh=0.40)
+    # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
+    # i.e. a single-column array, where each item in the column has the pixel RGB value
+    frame = np.copy(frame1.array)
+    frame.setflags(write=1)
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame_expanded = np.expand_dims(frame_rgb, axis=0)
 
-        if (int(classes[0][0]) == 1):
-            xcenter = int(((boxes[0][0][1] + boxes[0][0][3]) / 2) * IM_WIDTH)
-            ycenter = int(((boxes[0][0][0] + boxes[0][0][2]) / 2) * IM_HEIGHT)
-        else:
-            xcenter = 0
-            ycenter = 0
-        # All the results have been drawn on the frame, so it's time to display it.
-        #cv2.imshow('Object detector', frame)
+    # Perform the actual detection by running the model with the image as input
+    (boxes, scores, classes, num) = sess.run(
+        [detection_boxes, detection_scores, detection_classes, num_detections],
+        feed_dict={image_tensor: frame_expanded})
 
-        t2 = cv2.getTickCount()
-        time1 = (t2 - t1) / freq
-        frame_rate_calc = 1 / time1
-        
-        ## Action:
-        
-        if xcenter == 0 and ycenter == 0 and spin == 0:
+    # Draw the results of the detection (aka 'visulaize the results')
+    #vis_util.visualize_boxes_and_labels_on_image_array(
+        #frame,
+        #np.squeeze(boxes),
+        #np.squeeze(classes).astype(np.int32),
+        #np.squeeze(scores),
+        #category_index,
+        #use_normalized_coordinates=True,
+        #line_thickness=8,
+        #min_score_thresh=0.40)
+
+    if (int(classes[0][0]) == 1 and scores[0][0] > 0.8):
+        xcenter = int(((boxes[0][0][1] + boxes[0][0][3]) / 2) * IM_WIDTH)
+        ycenter = int(((boxes[0][0][0] + boxes[0][0][2]) / 2) * IM_HEIGHT)
+    elif (int(classes[0][1])== 1 and scores[0][1] > 0.7):
+        xcenter = int(((boxes[0][1][1] + boxes[0][1][3]) / 2) * IM_WIDTH)
+        ycenter = int(((boxes[0][1][0] + boxes[0][1][2]) / 2) * IM_HEIGHT)
+    elif (int(classes[0][2]) == 1 and scores[0][2] > 0.7):
+        xcenter = int(((boxes[0][2][1] + boxes[0][2][3]) / 2) * IM_WIDTH)
+        ycenter = int(((boxes[0][2][0] + boxes[0][2][2]) / 2) * IM_HEIGHT)
+    else:
+        xcenter = 0
+        ycenter = 0
+    ## puoi creare una funzione che se per piu di tot frames non rileva una persona allora vuol dire che la persona non c'è
+    ## e devo iniziare a cercarla, altrimenti tengo la xcenter, ycenter del giro prima
+
+    # All the results have been drawn on the frame, so it's time to display it.
+    #cv2.imshow('Object detector', frame)
+
+    t2 = cv2.getTickCount()
+    time1 = (t2 - t1) / freq
+    frame_rate_calc = 1 / time1
+
+    key = cv2.waitKey(1) & 0xFF
+
+    ## Action:
+
+    if xcenter == 0 and ycenter == 0 and spin == 0:
+        if fail == 1:
             print("Spin")
             spin = 1
-        elif xcenter != 0 and ycenter != 0 and spin == 1:
-            print("Stop motor and continue")
-            spin = 0
-        if xcenter < IM_WIDTH / 2 - IM_WIDTH / 8 and spin == 0:
-            print("gira a destra")
+        fail = 1
+    elif xcenter != 0 and ycenter != 0 and spin == 1:
+        print("Stop motor and continue")
+        spin = 0
+        fail = 0
+    if xcenter < IM_WIDTH / 2 - IM_WIDTH / 8 and spin == 0:
+        print("gira a destra")
 
-        elif xcenter > IM_WIDTH / 2 + IM_WIDTH / 8 and spin == 0:
-            print("gira a sinistra")
-            
-        # Press 'q' to quit
-        if cv2.waitKey(1) == ord('q'):
-            break
+    elif xcenter > IM_WIDTH / 2 + IM_WIDTH / 8 and spin == 0:
+        print("gira a sinistra")
 
-        rawCapture.truncate(0)
+    rawCapture.truncate(0)
 
-    camera.close()
+    # Press 'q' to quit         ########## prova a togliere questo comando per vedere se funziona
+    #if key == ord('q'):
+        #break
+    # --------------------------
+    stop = GP.input(BUTTON_STOP)
+    GP.output(LEDG, GP.HIGH)
+    if not stop:
+        go = False
+        GP.output(LEDG, GP.LOW)
+        print("Well Done")
+    # --------------------------
 
-### USB webcam ###
-elif camera_type == 'usb':
-    # Initialize USB webcam feed
-    camera = cv2.VideoCapture(0)
-    ret = camera.set(3, IM_WIDTH)
-    ret = camera.set(4, IM_HEIGHT)
-
-    while (True):
-
-        t1 = cv2.getTickCount()
-
-        # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
-        # i.e. a single-column array, where each item in the column has the pixel RGB value
-        ret, frame = camera.read()
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_expanded = np.expand_dims(frame_rgb, axis=0)
-
-        # Perform the actual detection by running the model with the image as input
-        (boxes, scores, classes, num) = sess.run(
-            [detection_boxes, detection_scores, detection_classes, num_detections],
-            feed_dict={image_tensor: frame_expanded})
-
-        # Draw the results of the detection (aka 'visulaize the results')
-        vis_util.visualize_boxes_and_labels_on_image_array(
-            frame,
-            np.squeeze(boxes),
-            np.squeeze(classes).astype(np.int32),
-            np.squeeze(scores),
-            category_index,
-            use_normalized_coordinates=True,
-            line_thickness=8,
-            min_score_thresh=0.85)
-
-        cv2.putText(frame, "FPS: {0:.2f}".format(frame_rate_calc), (30, 50), font, 1, (255, 255, 0), 2, cv2.LINE_AA)
-
-        # All the results have been drawn on the frame, so it's time to display it.
-
-        # Press 'q' to quit
-        if cv2.waitKey(1) == ord('q'):
-            break
-
-    camera.release()
-
-cv2.destroyAllWindows()
+camera.close()
