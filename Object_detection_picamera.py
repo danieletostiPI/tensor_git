@@ -112,15 +112,54 @@ rawCapture = PiRGBArray(camera, size=(IM_WIDTH, IM_HEIGHT))
 rawCapture.truncate(0)
 #-------------------------------------------------------------------------------------
 #RPGIO:
+
 LEDG = 16
 BUTTON_STOP = 18
 
+SERVO_ROT = 32
+
 GP.setup(LEDG, GP.OUT)
+GP.setup(SERVO_ROT, GP.OUT)
+
 GP.setup(BUTTON_STOP, GP.IN, pull_up_down=GP.PUD_UP)  # Se Button = 0, bottone pigiato.
+
+servo_rot = GP.PWM(SERVO_ROT, 50)  # 50 Hz
+
+#servo_rot.ChangeDutyCycle(0)  # fermo # va da 2.2 a 12
+#servo_lat.ChangeDutyCycle(0)
+
+DutyCycle1 = 27
+dc1 = float(DutyCycle1)
+
+def rotate_right(dc1, inc):
+    if dc1 <= 9:
+        dc1 = 9
+    else:
+        dc1 = dc1 - inc
+    servo_rot.ChangeDutyCycle(dc1 / 4)
+    time.sleep(0.05)
+    servo_rot.ChangeDutyCycle(0)
+    return dc1
+
+
+def rotate_left(dc1, inc):
+    if dc1 >= 42:
+        dc1 = 42
+    else:
+        dc1 = dc1 + inc
+    servo_rot.ChangeDutyCycle(dc1 / 4)
+    time.sleep(0.05)
+    servo_rot.ChangeDutyCycle(0)
+    return dc1
+
 
 spin = 0
 stop = True
-fail = 0
+i = 0
+enablel = 1
+enabler = 1
+servo_rot.start(6.8)
+servo_rot.ChangeDutyCycle(0)
 # -------------------------------------------------------------------------------------
 for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
 
@@ -176,19 +215,33 @@ for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port
     ## Action:
 
     if xcenter == 0 and ycenter == 0 and spin == 0:
-        if fail == 1:
-            print("Spin")
+        if i == 4:
+            print("Stop and Spin")
             spin = 1
-        fail = 1
+        i = i + 1
     elif xcenter != 0 and ycenter != 0 and spin == 1:
         print("Stop motor and continue")
         spin = 0
-        fail = 0
+        i = 0
     if xcenter < IM_WIDTH / 2 - IM_WIDTH / 8 and spin == 0:
-        print("gira a destra")
+        enablel = 1
+        if enabler == 1:
+            inc = 4
+            print("gira a destra")
+            dc1 = rotate_left(dc1, inc)
+            time.sleep(0.005)
+            if dc1 <= 9:
+                enabler = 0
 
     elif xcenter > IM_WIDTH / 2 + IM_WIDTH / 8 and spin == 0:
-        print("gira a sinistra")
+        enabler = 1
+        if enablel == 1:
+            inc = 4
+            print("gira a sinistra")
+            dc1 = rotate_right(dc1, inc)
+            time.sleep(0.005)
+            if dc1 >= 42:
+                enablel = 0
 
     rawCapture.truncate(0)
 
@@ -199,9 +252,9 @@ for frame1 in camera.capture_continuous(rawCapture, format="bgr", use_video_port
     stop = GP.input(BUTTON_STOP)
     GP.output(LEDG, GP.HIGH)
     if not stop:
-        go = False
         GP.output(LEDG, GP.LOW)
         print("Well Done")
+        break
     # --------------------------
 
 camera.close()
